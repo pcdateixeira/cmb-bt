@@ -2,9 +2,7 @@ import operator
 import random
 
 #
-#
 # Grabs the information needed from the instance
-#
 #
 
 def getInstance():
@@ -38,9 +36,7 @@ def getInstance():
     return (fileName, numVertices, numEdges, numColors, weights, edges, degrees)
 
 #
-#
-# Uses the Welsh-Powell algorithm to find an initial solution
-#
+# Uses the Welsh-Powell algorithm to find an initial solution with at most d(g) + 1 colors
 #
 
 def welshPowell(degrees, edges, numColors):
@@ -97,12 +93,54 @@ def welshPowell(degrees, edges, numColors):
 
     return (colorSets, uncoloredVertices)
 
+#
+# Gets the highest degree of a vertex in the current graph
+#
+
 def getMaxDegree(degrees):
     maxDegree = 0
     for i in range(0, numVertices):
         if degrees[i] > maxDegree:
             maxDegree = degrees[i]
     return maxDegree
+
+#
+# Finds an initial solution with k colors
+#
+
+def findInitialSolution(degrees, edges, numColors):
+    (colorSets, uncoloredVertices) = welshPowell(degrees, edges, numColors)
+
+    #iteration = 0
+    maxDegree = getMaxDegree(degrees)
+    origDegrees = degrees
+
+    while uncoloredVertices: # If there are any uncolored vertices after one iteration of Welsh-Powell,
+        #iteration += 1
+        #print(iteration)
+        for uncoloredVertex in uncoloredVertices:
+                if degrees[uncoloredVertex] < maxDegree:
+                    degrees[uncoloredVertex] += 1 # Artifically increases those vertices' degrees, so they get picked earlier in a future iteration
+                #else:
+                    #degrees[uncoloredVertex] = origDegrees[uncoloredVertex]
+
+        print(uncoloredVertices)
+        prevUncolored = uncoloredVertices
+
+        (colorSets, uncoloredVertices) = welshPowell(degrees, edges, numColors)
+
+        #if len(uncoloredVertices) > len(prevUncolored):
+            #uncoloredVertices = prevUncolored
+
+        if uncoloredVertices == prevUncolored:
+            #degrees[random.randint(0, numVertices)] -= 1
+            degrees = origDegrees
+
+    return colorSets
+
+#
+# Saves the initial solution in a file
+#
 
 def saveInitialSolution(fileName, numColors, colorSets, weights):
     if int(fileName[3:]) > 6:
@@ -122,36 +160,18 @@ def saveInitialSolution(fileName, numColors, colorSets, weights):
         initialSolution.write(str(colorSets[i]) + "\n")
     initialSolution.close()
 
+
+# Beginning of the script
+
 (fileName, numVertices, numEdges, numColors, weights, edges, degrees) = getInstance()
 
-(colorSets, uncoloredVertices) = welshPowell(degrees, edges, numColors)
-
-iteration = 0
-maxDegree = getMaxDegree(degrees)
-origDegrees = degrees
-
-while uncoloredVertices: # If there are any uncolored vertices after one iteration of Welsh-Powell,
-    iteration += 1
-    print(iteration)
-    for uncoloredVertex in uncoloredVertices:
-            if degrees[uncoloredVertex] < maxDegree:
-                degrees[uncoloredVertex] += 1 # Artifically increases those vertices' degrees, so they get picked earlier in a future iteration
-            #else:
-                #degrees[uncoloredVertex] = origDegrees[uncoloredVertex]
-
-    print(uncoloredVertices)
-    prevUncolored = uncoloredVertices
-
-    (colorSets, uncoloredVertices) = welshPowell(degrees, edges, numColors)
-
-    #if len(uncoloredVertices) > len(prevUncolored):
-        #uncoloredVertices = prevUncolored
-
-    if uncoloredVertices == prevUncolored:
-        #degrees[random.randint(0, numVertices)] -= 1
-        degrees = origDegrees
+colorSets = findInitialSolution(degrees, edges, numColors)
 
 saveInitialSolution(fileName, numColors, colorSets, weights)
+
+# Tabu search
+
+
 
 '''
 print(numVertices, numEdges, numColors)
