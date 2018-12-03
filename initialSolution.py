@@ -1,15 +1,21 @@
 import operator
+import os.path
 import time
 from pulp import *
 
 #
-# Grabs the information needed from the instance
+# Reads the information needed from the instance file
 #
 
-def getInstance():
+def readInstance():
     # Opens an instance of the problem
-    fileName = input("Digite o nome do arquivo da instância a ser analisada: ")
-    instance = open("instances/" + fileName, "r")
+    while True:
+        try:
+            fileName = input("Digite o nome do arquivo da instância a ser analisada: ")
+            instance = open("instances/" + fileName, "r")
+            break
+        except FileNotFoundError:
+            print("Arquivo não existente ou não encontrado no diretório atual, tente de novo.")
 
     # Reads all of its lines
     instanceLines = instance.readlines()
@@ -22,8 +28,6 @@ def getInstance():
     degrees = {} # Dictionary that will store the degree of each vertex, to be used to find an initial solution
     for i in range(0, numVertices):
         degrees[i] = 0
-    if int(fileName[3:]) > 6:
-        numColors += 1
     edges = []
     for line in instanceLines[2:2+numEdges]:
         edgeTuple = tuple(( int(line.split()[0]) , int(line.split()[1]) ))
@@ -41,9 +45,9 @@ def getInstance():
 #
 
 def welshPowell(degrees, edges, numColors):
-    colorSets = [] # A list of all color sets, each represented as a list of the vertices painted with that respective color
+    solution = [] # A list of all color sets, each represented as a list of the vertices painted with that respective color
     for i in range(0, numColors):
-        colorSets.append([])
+        solution.append([])
 
     uncoloredVertices = [] # List with possible vertices not colored by Welsh-Powell
 
@@ -59,10 +63,10 @@ def welshPowell(degrees, edges, numColors):
                 break
             cantPaint = 0
             for i in range(0, color+1):
-                if currentVertex[0] in colorSets[i]: # If the vertex was already painted,
+                if currentVertex[0] in solution[i]: # If the vertex was already painted,
                     cantPaint = 1
             if cantPaint == 0:
-                colorSets[color].append(currentVertex[0]) # Paints the first non-colored vertex with the first available color
+                solution[color].append(currentVertex[0]) # Paints the first non-colored vertex with the first available color
                 #print("Vertex " + str(currentVertex[0]) + " in the color set " + str(color))
                 cantPaint = -1
 
@@ -71,14 +75,14 @@ def welshPowell(degrees, edges, numColors):
             # Checks if the current vertex isn't adjacent to any other vertex painted with the current color
             for edge in edges:
                 if edge[0] == currentVertex[0] or edge[1] == currentVertex[0]: # If an edge is associated with the vertex,
-                    for coloredVertex in colorSets[color]:
+                    for coloredVertex in solution[color]:
                         if edge == (currentVertex[0], coloredVertex) or edge == (coloredVertex, currentVertex[0]): # and that edge is also associated with a vertex with the current color,
                             cantPaint = 1
 
                             if color == (numColors - 1): # Checks for vertices that couldn't be colored by Welsh-Powell
                                 cantPaint = -1
                                 for i in range(0, color+1):
-                                    if currentVertex[0] in colorSets[i]:
+                                    if currentVertex[0] in solution[i]:
                                         cantPaint = 1
                                 if cantPaint == -1 and currentVertex[0] not in uncoloredVertices:
                                     uncoloredVertices.append(currentVertex[0])
@@ -86,13 +90,13 @@ def welshPowell(degrees, edges, numColors):
             if cantPaint == 0:
                 #print("Vertex " + str(currentVertex[0]) + " ready to be added to the current color set")
                 for i in range(0, color+1):
-                    if currentVertex[0] in colorSets[i]: # If the vertex was already painted,
+                    if currentVertex[0] in solution[i]: # If the vertex was already painted,
                         cantPaint = 1
                 if cantPaint == 0:
-                    colorSets[color].append(currentVertex[0])
+                    solution[color].append(currentVertex[0])
                     #print("The current color set has " + str(len(colorSets[color])) + " vertices")
 
-    return (colorSets, uncoloredVertices)
+    return (solution, uncoloredVertices)
 
 #
 # Gets the highest degree of a vertex in the current graph
@@ -106,12 +110,48 @@ def getMaxDegree(degrees):
     return maxDegree
 
 #
+# Gets the value of a solution
+#
+
+def getSolutionValue(solution, numColors, weights):
+    solWeights = [0] * numColors
+    for i in range(0, numColors):
+        for vertex in solution[i]:
+            solWeights[i] += weights[vertex]
+        solWeights[i] = round(solWeights[i], 2)
+    return max(solWeights)
+
+#
+# Reads the initial solution from the previously created file
+#
+
+def readInitialSolution(fileName, numColors):
+    file = open("solutions/initSol-" + fileName, "r")
+
+    # Reads all of its lines
+    fileLines = file.readlines()
+
+    solution = [] # A list of all color sets, each represented as a list of the vertices painted with that respective color
+    for i in range(0, numColors):
+        solution.append([])
+
+    i = 0
+    currentColor = 0
+    for line in fileLines:
+        if i % 2 != 0 and currentColor < numColors: # In a solution file, every other line contains the vertices of a color
+            solution[currentColor] = eval(line)
+            currentColor += 1
+        i += 1
+
+    return solution
+
+#
 # Finds an initial solution with k colors
 #
 
-def findInitialSolution(degrees, edges, numColors):
+def initialSolution(degrees, edges, numColors, weights, fileName):
     ti = time.time()
-    (colorSets, uncoloredVertices) = welshPowell(degrees, edges, numColors)
+    (solution, uncoloredVertices) = welshPowell(degrees, edges, numColors)
 
     #iteration = 0
     maxDegree = getMaxDegree(degrees)
@@ -129,7 +169,7 @@ def findInitialSolution(degrees, edges, numColors):
         print(uncoloredVertices)
         prevUncolored = uncoloredVertices
 
-        (colorSets, uncoloredVertices) = welshPowell(degrees, edges, numColors)
+        (solution, uncoloredVertices) = welshPowell(degrees, edges, numColors)
 
         #if len(uncoloredVertices) > len(prevUncolored):
             #uncoloredVertices = prevUncolored
@@ -140,39 +180,33 @@ def findInitialSolution(degrees, edges, numColors):
 
 
     tf = time.time()
+    timer = tf - ti
 
-    return (colorSets, tf-ti)
+    # Writes the solution into a file
 
-#
-# Saves the initial solution in a file
-#
-
-def saveInitialSolution(fileName, numColors, colorSets, weights, timer):
-    if int(fileName[3:]) > 6:
-        numColors -= 1
-        colorSets[numColors - 1] += colorSets[numColors]
-    setWeights = [0] * numColors
+    solWeights = [0] * numColors
     for i in range(0, numColors):
-        for vertex in colorSets[i]:
-            setWeights[i] += weights[vertex]
-        setWeights[i] = round(setWeights[i], 2)
+        for vertex in solution[i]:
+            solWeights[i] += weights[vertex]
+        solWeights[i] = round(solWeights[i], 2)
 
-        #print("Cor " + str(i + 1) + ": " + str(len(colorSets[i])) + " vértices, peso = " + str(setWeights[i]))
+            #print("Cor " + str(i + 1) + ": " + str(len(colorSets[i])) + " vértices, peso = " + str(setWeights[i]))
 
     initialSolution = open("solutions/initSol-" + fileName, "w")
     for i in range(0, numColors):
-        initialSolution.write("Cor " + str(i + 1) + ", peso = " + str(setWeights[i]) + "\n")
-        initialSolution.write(str(colorSets[i]) + "\n")
-    initialSolution.write("Valor da solucao: " + str(max(setWeights)) + "\n")
+        initialSolution.write("Cor " + str(i + 1) + ", peso = " + str(solWeights[i]) + "\n")
+        initialSolution.write(str(solution[i]) + "\n")
+    initialSolution.write("Valor da solucao: " + str(max(solWeights)) + "\n")
     if timer < 60:
         initialSolution.write("Tempo percorrido: " + str(round(timer, 2)) + " segundos\n")
-    else if timer < 3600:
+    elif timer < 3600:
         initialSolution.write("Tempo percorrido: " + str(round( (timer/60), 2)) + " minutos\n")
     else:
         initialSolution.write("Tempo percorrido: " + str(round( (timer/3600), 2)) + " horas\n")
 
-
     initialSolution.close()
+
+    return solution
 
 #
 # Uses GLPK to solve the formulated problem
@@ -208,7 +242,7 @@ def solverSolution(fileName, numVertices, numColors, edges, weights):
         prob += z >= lpSum([x[v][c] * weights[v] for v in range(0, numVertices)]), "z must be higher than the sum of weights in color " + str(c+1)
 
     # The problem is solved using GLPK
-    prob.solve(GLPK())
+    prob.solve(GLPK(options=["--tmlim", str(60*60*4)])) # Set a time limit for 4 hours
 
     tf = time.time()
     timer = tf - ti
@@ -239,7 +273,7 @@ def solverSolution(fileName, numVertices, numColors, edges, weights):
     solverSolution.write("Valor da solucao: " + str(value(prob.objective)) + "\n")
     if timer < 60:
         solverSolution.write("Tempo percorrido: " + str(round(timer, 2)) + " segundos\n")
-    else if timer < 3600:
+    elif timer < 3600:
         solverSolution.write("Tempo percorrido: " + str(round( (timer/60), 2)) + " minutos\n")
     else:
         solverSolution.write("Tempo percorrido: " + str(round( (timer/3600), 2)) + " horas\n")
@@ -247,11 +281,22 @@ def solverSolution(fileName, numVertices, numColors, edges, weights):
 
 # Beginning of the script
 
-(fileName, numVertices, numEdges, numColors, weights, edges, degrees) = getInstance()
+(fileName, numVertices, numEdges, numColors, weights, edges, degrees) = readInstance()
 
+if not os.path.isfile("solutions/initSol-" + fileName):
+    currentSol = initialSolution(degrees, edges, numColors, weights, fileName)
+else:
+    currentSol = readInitialSolution(fileName, numColors)
 
-(colorSets, timer) = findInitialSolution(degrees, edges, numColors)
+bestSolValue = getSolutionValue(currentSol, numColors, weights)
+bestSol = currentSol
+tabuList = []
 
-saveInitialSolution(fileName, numColors, colorSets, weights, timer)
+'''while criteria:
+    currentSol = bestNeighbor(currentSol)
+    if getSolutionValue(currentSol) < bestSolValue:
+        bestSolValue = getSolutionValue(currentSol)
+        bestSol = currentSol
+    tabuList.append(movement)'''
 
 solverSolution(fileName, numVertices, numColors, edges, weights)
