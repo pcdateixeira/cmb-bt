@@ -1,5 +1,6 @@
 import operator
-import random
+import time
+from pulp import *
 
 #
 # Grabs the information needed from the instance
@@ -109,6 +110,7 @@ def getMaxDegree(degrees):
 #
 
 def findInitialSolution(degrees, edges, numColors):
+    ti = time.time()
     (colorSets, uncoloredVertices) = welshPowell(degrees, edges, numColors)
 
     #iteration = 0
@@ -136,13 +138,16 @@ def findInitialSolution(degrees, edges, numColors):
             #degrees[random.randint(0, numVertices)] -= 1
             degrees = origDegrees
 
-    return colorSets
+
+    tf = time.time()
+
+    return (colorSets, tf-ti)
 
 #
 # Saves the initial solution in a file
 #
 
-def saveInitialSolution(fileName, numColors, colorSets, weights):
+def saveInitialSolution(fileName, numColors, colorSets, weights, timer):
     if int(fileName[3:]) > 6:
         numColors -= 1
         colorSets[numColors - 1] += colorSets[numColors]
@@ -152,30 +157,101 @@ def saveInitialSolution(fileName, numColors, colorSets, weights):
             setWeights[i] += weights[vertex]
         setWeights[i] = round(setWeights[i], 2)
 
-        print("Cor " + str(i + 1) + ": " + str(len(colorSets[i])) + " vértices, peso = " + str(setWeights[i]))
+        #print("Cor " + str(i + 1) + ": " + str(len(colorSets[i])) + " vértices, peso = " + str(setWeights[i]))
 
-    initialSolution = open("solutions/sol-" + fileName, "w")
+    initialSolution = open("solutions/initSol-" + fileName, "w")
     for i in range(0, numColors):
         initialSolution.write("Cor " + str(i + 1) + ", peso = " + str(setWeights[i]) + "\n")
         initialSolution.write(str(colorSets[i]) + "\n")
+    initialSolution.write("Valor da solucao: " + str(max(setWeights)) + "\n")
+    if timer < 60:
+        initialSolution.write("Tempo percorrido: " + str(round(timer, 2)) + " segundos\n")
+    else if timer < 3600:
+        initialSolution.write("Tempo percorrido: " + str(round( (timer/60), 2)) + " minutos\n")
+    else:
+        initialSolution.write("Tempo percorrido: " + str(round( (timer/3600), 2)) + " horas\n")
+
+
     initialSolution.close()
 
+#
+# Uses GLPK to solve the formulated problem
+#
+
+def solverSolution(fileName, numVertices, numColors, edges, weights):
+
+    ti = time.time()
+
+    # Create the 'prob' variable to contain the problem data
+    prob = LpProblem("Most Balanced Graph Coloring",LpMinimize)
+
+    # Create the problem's variables
+    x = []
+    for v in range(0, numVertices):
+        x.append([])
+        for c in range(0, numColors):
+            x[v].append(LpVariable("v" + str(v+1) + "c" + str(c+1),0,1,LpInteger))
+    z = LpVariable("z", 0, None, LpContinuous)
+
+    # The objective function is added to 'prob' first
+    prob += z, "Value of the highest sum of weights in any color"
+
+    # The three series of constraints are entered
+    for v in range(0, numVertices):
+        prob += lpSum([x[v][c] for c in range(0, numColors)]) == 1, "Vertex " + str(v+1) + " must only have one color"
+
+    for edge in edges:
+        for c in range(0, numColors):
+            prob += x[edge[0]-1][c] + x[edge[1]-1][c] <= 1, "Edge " + str(edge) + " cannot connect 2 vertices of the color " + str(c+1)
+
+    for c in range(0, numColors):
+        prob += z >= lpSum([x[v][c] * weights[v] for v in range(0, numVertices)]), "z must be higher than the sum of weights in color " + str(c+1)
+
+    # The problem is solved using GLPK
+    prob.solve(GLPK())
+
+    tf = time.time()
+    timer = tf - ti
+
+    # The status of the solution is printed to the screen
+    print("Status:", LpStatus[prob.status])
+
+    colorSets = [] # A list of all color sets, each represented as a list of the vertices painted with that respective color
+    for i in range(0, numColors):
+        colorSets.append([])
+    setWeights = [0] * numColors # List that will contain the weight of each color
+
+    # Change the variables to a readable format
+    for v in prob.variables():
+        if v.name != "z":
+            if v.varValue == 1:
+                vertexColor = int(v.name.split('c')[1]) - 1
+                vertexNumber = int(v.name.split('c')[0][1:])
+                colorSets[vertexColor].append(vertexNumber)
+                setWeights[vertexColor] += weights[vertexNumber-1]
+
+    # Writes the solution to a file
+    solverSolution = open("solutions/solverSol-" + fileName, "w")
+    for i in range(0, numColors):
+        setWeights[i] = round(setWeights[i], 2)
+        solverSolution.write("Cor " + str(i + 1) + ", peso = " + str(setWeights[i]) + "\n")
+        solverSolution.write(str(colorSets[i]) + "\n")
+    solverSolution.write("Valor da solucao: " + str(value(prob.objective)) + "\n")
+    if timer < 60:
+        solverSolution.write("Tempo percorrido: " + str(round(timer, 2)) + " segundos\n")
+    else if timer < 3600:
+        solverSolution.write("Tempo percorrido: " + str(round( (timer/60), 2)) + " minutos\n")
+    else:
+        solverSolution.write("Tempo percorrido: " + str(round( (timer/3600), 2)) + " horas\n")
+    solverSolution.close()
 
 # Beginning of the script
 
 (fileName, numVertices, numEdges, numColors, weights, edges, degrees) = getInstance()
 
-colorSets = findInitialSolution(degrees, edges, numColors)
 
-saveInitialSolution(fileName, numColors, colorSets, weights)
+(colorSets, timer) = findInitialSolution(degrees, edges, numColors)
 
-# Tabu search
+saveInitialSolution(fileName, numColors, colorSets, weights, timer)
 
-
-
-'''
-print(numVertices, numEdges, numColors)
-print(weights)
-print(edges)
-print(vertByDegree)
-'''
+solverSolution(fileName, numVertices, numColors, edges, weights)
