@@ -1,7 +1,31 @@
 import operator
 import os.path
 import time
+import sys
 from pulp import *
+
+#
+# Gets the highest degree of a vertex in the current graph
+#
+
+def getMaxDegree(degrees):
+    maxDegree = 0
+    for i in range(0, numVertices):
+        if degrees[i] > maxDegree:
+            maxDegree = degrees[i]
+    return maxDegree
+
+#
+# Gets the value of a solution
+#
+
+def getSolutionValue(solution, numColors, weights):
+    solWeights = [0] * numColors
+    for i in range(0, numColors):
+        for vertex in solution[i]:
+            solWeights[i] += weights[vertex]
+        solWeights[i] = round(solWeights[i], 2)
+    return max(solWeights)
 
 #
 # Reads the information needed from the instance file
@@ -39,6 +63,30 @@ def readInstance():
     instance.close()
 
     return (fileName, numVertices, numEdges, numColors, weights, edges, degrees)
+
+#
+# Reads the initial solution from the previously created file
+#
+
+def readInitialSolution(fileName, numColors):
+    file = open("solutions/initSol-" + fileName, "r")
+
+    # Reads all of its lines
+    fileLines = file.readlines()
+
+    solution = [] # A list of all color sets, each represented as a list of the vertices painted with that respective color
+    for i in range(0, numColors):
+        solution.append([])
+
+    i = 0
+    currentColor = 0
+    for line in fileLines:
+        if i % 2 != 0 and currentColor < numColors: # In a solution file, every other line contains the vertices of a color
+            solution[currentColor] = eval(line)
+            currentColor += 1
+        i += 1
+
+    return solution
 
 #
 # Uses the Welsh-Powell algorithm to find an initial solution with at most d(g) + 1 colors
@@ -97,53 +145,6 @@ def welshPowell(degrees, edges, numColors):
                     #print("The current color set has " + str(len(colorSets[color])) + " vertices")
 
     return (solution, uncoloredVertices)
-
-#
-# Gets the highest degree of a vertex in the current graph
-#
-
-def getMaxDegree(degrees):
-    maxDegree = 0
-    for i in range(0, numVertices):
-        if degrees[i] > maxDegree:
-            maxDegree = degrees[i]
-    return maxDegree
-
-#
-# Gets the value of a solution
-#
-
-def getSolutionValue(solution, numColors, weights):
-    solWeights = [0] * numColors
-    for i in range(0, numColors):
-        for vertex in solution[i]:
-            solWeights[i] += weights[vertex]
-        solWeights[i] = round(solWeights[i], 2)
-    return max(solWeights)
-
-#
-# Reads the initial solution from the previously created file
-#
-
-def readInitialSolution(fileName, numColors):
-    file = open("solutions/initSol-" + fileName, "r")
-
-    # Reads all of its lines
-    fileLines = file.readlines()
-
-    solution = [] # A list of all color sets, each represented as a list of the vertices painted with that respective color
-    for i in range(0, numColors):
-        solution.append([])
-
-    i = 0
-    currentColor = 0
-    for line in fileLines:
-        if i % 2 != 0 and currentColor < numColors: # In a solution file, every other line contains the vertices of a color
-            solution[currentColor] = eval(line)
-            currentColor += 1
-        i += 1
-
-    return solution
 
 #
 # Finds an initial solution with k colors
@@ -280,6 +281,14 @@ def solverSolution(fileName, numVertices, numColors, edges, weights):
     solverSolution.close()
 
 # Beginning of the script
+
+try:
+    outputFile = sys.argv[1]
+except IndexError:
+    print("\nParâmetros insuficientes. Formato esperado:\n")
+    print("python cmb-bt.py <arquivo>")
+    print("    * <arquivo>: nome do arquivo no qual guardar a solução final.")
+    sys.exit(1)
 
 (fileName, numVertices, numEdges, numColors, weights, edges, degrees) = readInstance()
 
